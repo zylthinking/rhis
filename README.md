@@ -14,7 +14,7 @@ Due to these simplifications and certain code adjustments, the codebase of rhis 
 Here are some feature enhancements:
 
 1. No longer uses temporary files on disk.
-2. UI flickering should be reduced compared to McFly.
+2. UI flickering should be reduced compared to McFly, and No padding exists in candicate lists between the command and the timestamp
 3. UI rendering no longer leaves artifacts, and the window will be correctly redrawn when resizing. Long input commands will not overlap the candidate list (although there is now a maximum length limit for input commands).
 4. Supports scrolling of the candidate list when it exceeds the window size.
 5. The database will no longer infinitely expand, eliminating potential slowdown issues.
