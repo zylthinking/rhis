@@ -1,0 +1,58 @@
+[package]
+edition = "2021"
+name = "rhis"
+version = "0.9.0"
+authors = ["zylthinking"]
+description = "rhis is a modification to fit my usage based on McFly 0.8.1"
+categories = ["command-line-utilities"]
+license = "MIT"
+repository = "https://github.com/zylthinking/rhis"
+
+[profile.dev]
+debug = true
+
+[profile.release]
+lto = true
+
+[dependencies.chrono]
+version = "0.4"
+
+[dependencies.clap]
+version = "4"
+features = ["derive"]
+
+[dependencies.crossterm]
+version = "0.26"
+features = ["use-dev-tty"]
+
+[dependencies.directories-next]
+version = "2.0"
+
+[dependencies.humantime]
+version = "2.1"
+
+[dependencies.libc]
+version = "0.2"
+
+[dependencies.rand]
+version = "0.8"
+
+[dependencies.relative-path]
+version = "1.7"
+
+[dependencies.rusqlite]
+version = "0.28"
+features = [
+    "functions",
+    "unlock_notify",
+]
+
+[dependencies.shellexpand]
+version = "2.1"
+
+[dependencies.unicode-segmentation]
+version = "1.9"
+
+[features]
+default = ["sqlite-bundled"]
+sqlite-bundled = ["rusqlite/bundled"]
