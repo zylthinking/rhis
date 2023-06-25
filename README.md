@@ -1,5 +1,7 @@
 # rhis: A Modified Version of McFly
 
+ ![rhis](rhis.png) 
+
 This is a modified version of McFly 0.8.1.
 
 Several features of McFly have been simplified in rhis:
