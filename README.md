@@ -8,7 +8,7 @@ Several features of McFly have been simplified in rhis:
 
 1. Only the Init/Add/Search subcommands are included, and the remaining two subcommands have been removed.
 2. Only bash versions that have implemented `bind-x` are supported, and other shells are no longer supported.
-3. no vim/emacs key bindings any more, the only supported key is up/down (too many bindings confuses me :) ).
+3. No vim/emacs key bindings any more, the only supported key is up/down (too many bindings confuses me :) ).
 4. Only the settings for dark/light themes and UI placement (top/bottom) are supported via the command line. All other settings are no longer supported, and all custom environment variables have been removed.
 5. The database will no longer infinitely expand. As a consequence, the `nn_rank` function no longer supports the `overlap_factor` and `immediate_overlap_factor` parameters, and they are forcefully set to 0.0. Therefore, there might be some differences between the candidate list and McFly. Apart from these two parameters, all other parameters should remain the same.
 
