@@ -21,3 +21,17 @@ Here are some feature enhancements:
 4. Supports scrolling of the candidate list when it exceeds the window size.
 5. The database will no longer infinitely expand, eliminating potential slowdown issues.
 6. When encountering errors in the Add/Search subcommands, rhis avoids panicking and disrupting the user's shell, although this has not been implemented thoroughly.
+
+Usage:
+
+in .bashrc, add the code at the end:
+
+```bash
+eval "$(rhis init --light --bottom)"
+```
+
+or just to disable light theme and bottom placement
+
+```bash
+eval "$(rhis init)"
+```
