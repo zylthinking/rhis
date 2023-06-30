@@ -1,29 +1,4 @@
-use relative_path::RelativePath;
-use std::{env, path::Path};
 use unicode_segmentation::UnicodeSegmentation;
-
-pub fn normalize_path(incoming_path: &str) -> Option<String> {
-    let expanded_path = shellexpand::tilde(incoming_path);
-
-    let cwd = env::var("PWD").ok()?;
-    let cwd = Path::new(&cwd);
-    if !cwd.is_absolute() {
-        return None;
-    }
-
-    let path_buf = if expanded_path.starts_with('/') {
-        RelativePath::new(&expanded_path).normalize().to_path("")
-    } else {
-        let to_current_dir = RelativePath::new(&expanded_path).to_path(cwd);
-        RelativePath::new(to_current_dir.to_str().unwrap()).normalize().to_path("")
-    };
-
-    if path_buf.is_absolute() {
-        path_buf.to_str().map(|s| s.to_owned())
-    } else {
-        None
-    }
-}
 
 pub fn parse_mv_command(command: &str) -> Vec<String> {
     let mut in_double_quote = false;

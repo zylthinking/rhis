@@ -3,6 +3,7 @@ use rhis::{
     interface::Interface,
     settings::{Mode, Settings},
 };
+use std::time::{SystemTime, UNIX_EPOCH};
 
 fn handle_addition(settings: &Settings) {
     let mut history = History::load::<false>();
@@ -51,8 +52,16 @@ fn main() {
                     s = script.into();
                 }
                 s.replace_range(offset..offset + 8, "");
-                script = s.as_str();
             }
+
+            let offset = script.find("__sid_place_holder__").unwrap();
+            let time = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos();
+            let sid = format!("{time}");
+            if s.is_empty() {
+                s = script.into();
+            }
+            s.replace_range(offset..offset + 20, sid.as_str());
+            script = s.as_str();
             print!("{}", script);
         }
     }

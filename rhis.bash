@@ -19,13 +19,13 @@ if [[ -t 0 ]] && [[ "$_RHIS_LOADED" != "loaded" ]]; then
   # Append new history items to .bash_history
   shopt -s histappend
 
-  SID="$(command dd if=/dev/urandom bs=256 count=1 2> /dev/null | LC_ALL=C command tr -dc 'a-zA-Z0-9' | command head -c 24)"
+  SID="__sid_place_holder__"
   OLDIR=$(pwd)
   IDX=0
   function rhis_prompt_command {
       local exit_code=$?
 
-      local cmd=$(history 1)
+      local cmd=$(HISTTIMEFORMAT= history 1)
       cmd="${cmd##*( )}"
 
       local i=${cmd/ */}
@@ -35,7 +35,7 @@ if [[ -t 0 ]] && [[ "$_RHIS_LOADED" != "loaded" ]]; then
           then
               cmd="${cmd#* }"
               cmd="${cmd##*( )}"
-              $EXEUTABLE --sid $SID add --dir $OLDIR --exit ${exit_code} "$cmd"
+              HISTFILE=$HISTFILE $EXEUTABLE --sid $SID add --dir $OLDIR --exit ${exit_code} "$cmd"
           fi
           IDX=$i
       fi

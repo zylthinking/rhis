@@ -1,4 +1,6 @@
-use crate::{history::db_extensions, network::Network, path_update_helpers, settings::Settings, shell_history};
+use crate::{
+    history::db_extensions, network::Network, path_update_helpers, pathutil, settings::Settings, shell_history,
+};
 use rusqlite::{named_params, Connection, Transaction};
 use std::{
     fs,
@@ -96,7 +98,11 @@ impl History {
     }
 
     pub fn add(&mut self, command: &str, session_id: &str, dir: &str, exit_code: i32) {
-        self.possibly_update_paths(command, exit_code);
+        if exit_code == 0 {
+            self.possibly_update_paths(command, dir);
+        } else if !pathutil::execute_able(command, dir) {
+            return;
+        }
         let ebm = self.execute_by_me(command, session_id, dir);
         let v = vec![command.to_owned()];
         Self::add_commands(&mut self.conn, Some(dir), exit_code, ebm as i32, &v);
@@ -128,17 +134,16 @@ impl History {
             .unwrap_or(0);
     }
 
-    pub fn possibly_update_paths(&self, command: &str, exit_code: i32) {
-        let successful = exit_code == 0;
+    pub fn possibly_update_paths(&self, command: &str, dir: &str) {
         let is_move = |c: &str| c.to_lowercase().starts_with("mv ") && !c.contains('*') && !c.contains('?');
-        if !successful || !is_move(command) {
+        if !is_move(command) {
             return;
         }
 
         let parts = path_update_helpers::parse_mv_command(command);
         if parts.len() == 2 {
-            let normalized_from = path_update_helpers::normalize_path(&parts[0]);
-            let normalized_to = path_update_helpers::normalize_path(&parts[1]);
+            let normalized_from = pathutil::normalize_path(&parts[0], dir);
+            let normalized_to = pathutil::normalize_path(&parts[1], dir);
             if normalized_from.is_none() || normalized_to.is_none() {
                 return;
             }

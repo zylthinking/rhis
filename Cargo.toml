@@ -53,6 +53,10 @@ version = "2.1"
 [dependencies.unicode-segmentation]
 version = "1.9"
 
+[dependencies]
+is_executable = "1.0.0"
+which = "4.0"
+
 [features]
 default = ["sqlite-bundled"]
 sqlite-bundled = ["rusqlite/bundled"]
