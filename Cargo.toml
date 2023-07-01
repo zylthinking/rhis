@@ -1,7 +1,7 @@
 [package]
 edition = "2021"
 name = "rhis"
-version = "0.9.0"
+version = "0.10.0"
 authors = ["zylthinking"]
 description = "rhis is a modification to fit my usage based on McFly 0.8.1"
 categories = ["command-line-utilities"]
