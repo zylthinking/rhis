@@ -1,6 +1,4 @@
-use crate::{
-    history::db_extensions, network::Network, path_update_helpers, pathutil, settings::Settings, shell_history,
-};
+use crate::{history::db_extensions, network::Network, path_update_helpers, settings::Settings, shell, shell_history};
 use rusqlite::{named_params, Connection, Transaction};
 use std::{
     fs,
@@ -100,7 +98,7 @@ impl History {
     pub fn add(&mut self, command: &str, session_id: &str, dir: &str, exit_code: i32) {
         if exit_code == 0 {
             self.possibly_update_paths(command, dir);
-        } else if !pathutil::execute_able(command, dir) {
+        } else if !shell::execute_able(command, dir, exit_code) {
             return;
         }
         let ebm = self.execute_by_me(command, session_id, dir);
@@ -142,8 +140,8 @@ impl History {
 
         let parts = path_update_helpers::parse_mv_command(command);
         if parts.len() == 2 {
-            let normalized_from = pathutil::normalize_path(&parts[0], dir);
-            let normalized_to = pathutil::normalize_path(&parts[1], dir);
+            let normalized_from = shell::normalize_path(&parts[0], dir);
+            let normalized_to = shell::normalize_path(&parts[1], dir);
             if normalized_from.is_none() || normalized_to.is_none() {
                 return;
             }

@@ -7,7 +7,7 @@ pub mod interface;
 pub mod network;
 pub mod node;
 pub mod path_update_helpers;
-mod pathutil;
 pub mod settings;
+mod shell;
 pub mod shell_history;
 pub mod simplified_command;

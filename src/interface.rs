@@ -106,9 +106,7 @@ impl<'a> Interface<'a> {
         }
     }
 
-    fn build_cache_table(&self) {
-        self.history.build_cache_table(&self.settings.dir, self.anywhere);
-    }
+    fn build_cache_table(&self) { self.history.build_cache_table(&self.settings.dir, self.anywhere); }
 
     fn menubar<W: Write>(&self, screen: &mut W, width: u16, height: u16) {
         let indx = self.line_range::<1>(height);
@@ -563,11 +561,5 @@ impl<'a> Interface<'a> {
         }
     }
 
-    fn command_line_index(&self, index: i16) -> i16 {
-        if self.settings.bottom {
-            -index
-        } else {
-            index
-        }
-    }
+    fn command_line_index(&self, index: i16) -> i16 { if self.settings.bottom { -index } else { index } }
 }
