@@ -20,7 +20,6 @@ if [[ -t 0 ]] && [[ "$_RHIS_LOADED" != "loaded" ]]; then
   shopt -s histappend
 
   SID="__sid_place_holder__"
-  OLDIR=$(pwd)
   IDX=0
   function rhis_prompt_command {
       local exit_code=$?
@@ -35,12 +34,11 @@ if [[ -t 0 ]] && [[ "$_RHIS_LOADED" != "loaded" ]]; then
           then
               cmd="${cmd#* }"
               cmd="${cmd##*( )}"
-              HISTFILE=$HISTFILE $EXEUTABLE --sid $SID add --dir $OLDIR --exit ${exit_code} "$cmd"
+              HISTFILE=$HISTFILE $EXEUTABLE --sid $SID add --exit ${exit_code} "$cmd"
           fi
           IDX=$i
       fi
 
-      OLDIR=$(pwd)
       return ${exit_code}
   }
 
@@ -55,7 +53,7 @@ if [[ -t 0 ]] && [[ "$_RHIS_LOADED" != "loaded" ]]; then
   function rhis_search {
       local cmd=${READLINE_LINE[@]};
       READLINE_LINE= ;
-      HISTFILE=$HISTFILE $EXEUTABLE --sid $SID search --dir $OLDIR --light --bottom "$cmd"
+      HISTFILE=$HISTFILE $EXEUTABLE --sid $SID search --light --bottom "$cmd"
   }
 
   # If this is an interactive shell, take ownership of ctrl-r.

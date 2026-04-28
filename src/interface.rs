@@ -31,7 +31,6 @@ pub struct Interface<'a> {
     offset: usize,
     matches: Vec<Match>,
     menu_mode: MenuMode,
-    anywhere: bool,
     width: u16,
     height: u16,
     total_count: i64,
@@ -51,18 +50,14 @@ pub enum MenuMode {
 }
 
 impl MenuMode {
-    fn text(&self, interface: &Interface) -> String {
+    fn text(&self) -> String {
         let mut menu_text = String::from("rhis");
 
         if *self == MenuMode::ConfirmDelete {
             return String::from("Delete selected command from the history? (Y/N)");
         }
 
-        menu_text.push_str(" | ⏎ - Run | TAB - Edit | F2 - Delete | ");
-        match interface.anywhere {
-            true => menu_text.push_str("F3 - All Directories"),
-            _ => menu_text.push_str("F3 - This Directory"),
-        }
+        menu_text.push_str(" | ⏎ - Run | TAB - Edit | F2 - Delete");
 
         menu_text
     }
@@ -84,7 +79,6 @@ impl<'a> Interface<'a> {
             offset: 0,
             matches: Vec::new(),
             menu_mode: MenuMode::Normal,
-            anywhere: true,
             width: w,
             height: h,
             total_count: 0,
@@ -99,7 +93,7 @@ impl<'a> Interface<'a> {
         let command = &self.input.command;
         if command.chars().any(|c| !c.is_whitespace()) {
             let rt = tokio::runtime::Handle::current();
-            rt.block_on(db::record_selected(command, &self.settings.sid, &self.settings.dir));
+            rt.block_on(db::record_selected(command, &self.settings.sid));
             Some(command)
         } else {
             None
@@ -110,8 +104,6 @@ impl<'a> Interface<'a> {
         let rt = tokio::runtime::Handle::current();
         let (matches, total) = rt.block_on(db::find_matches(
             &self.input.command,
-            &self.settings.dir,
-            self.anywhere,
             PAGE_SIZE as i64,
             0,
         ));
@@ -131,8 +123,6 @@ impl<'a> Interface<'a> {
         let rt = tokio::runtime::Handle::current();
         let (more, _total) = rt.block_on(db::find_matches(
             &self.input.command,
-            &self.settings.dir,
-            self.anywhere,
             PAGE_SIZE as i64,
             offset,
         ));
@@ -152,7 +142,7 @@ impl<'a> Interface<'a> {
         }
 
         let width = width as usize - 1;
-        let mut text = self.menu_mode.text(self);
+        let mut text = self.menu_mode.text();
         if text.len() > width {
             text.truncate(width - 3);
             text.push_str("...");
@@ -386,14 +376,9 @@ impl<'a> Interface<'a> {
     fn delete_selection(&mut self) {
         if !self.matches.is_empty() {
             let command = &self.matches[self.selection];
-            history_cleaner::clean(&command.cmd, &self.settings.dir);
+            history_cleaner::clean(&command.cmd);
             self.load_initial_matches();
         }
-    }
-
-    fn switch_result_filter(&mut self) {
-        self.anywhere = !self.anywhere;
-        self.load_initial_matches();
     }
 
     fn key_code_handler(&mut self, key_event: KeyEvent) -> bool {
@@ -468,7 +453,6 @@ impl<'a> Interface<'a> {
                 Event::Key(key_event) => {
                     let cursor = self.input.cursor;
                     let menu = self.menu_mode;
-                    let anywhere = self.anywhere;
                     idx = self.selection as i32;
 
                     if self.key_code_handler(key_event) {
@@ -477,7 +461,6 @@ impl<'a> Interface<'a> {
 
                     if cursor != self.input.cursor
                         || menu != self.menu_mode
-                        || anywhere != self.anywhere
                     {
                         idx = -1;
                     }
@@ -563,11 +546,6 @@ impl<'a> Interface<'a> {
                     self.menu_mode = MenuMode::ConfirmDelete;
                 }
 
-            KeyEvent {
-                code: KeyCode::F(3), ..
-            } => {
-                self.switch_result_filter();
-            }
             _ => {}
         }
 

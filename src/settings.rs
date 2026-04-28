@@ -12,7 +12,6 @@ pub struct Settings {
     pub mode: Mode,
     pub sid: String,
     pub command: String,
-    pub dir: String,
     pub exit_code: i32,
     pub lightmode: bool,
     pub bottom: bool,
@@ -25,7 +24,6 @@ impl Default for Settings {
             mode: Mode::Add,
             command: String::new(),
             sid: String::new(),
-            dir: String::new(),
             exit_code: 0,
             lightmode: false,
             bottom: false,
@@ -47,11 +45,9 @@ impl Settings {
             SubCommand::Add {
                 command,
                 exit,
-                directory,
             } => {
                 settings.mode = Mode::Add;
                 settings.exit_code = exit;
-                settings.dir = directory.unwrap_or_default();
                 if !command.is_empty() {
                     settings.command = command.join(" ").trim().into();
                 }
@@ -59,12 +55,10 @@ impl Settings {
 
             SubCommand::Search {
                 command,
-                directory,
                 bottom,
                 light,
             } => {
                 settings.mode = Mode::Search;
-                settings.dir = directory.unwrap_or_default();
                 if !command.is_empty() {
                     settings.command = command.join(" ").trim().into();
                 }

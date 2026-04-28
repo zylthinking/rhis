@@ -88,7 +88,7 @@ pub(super) mod bash {
     }
 }
 
-pub(super) fn execute_able(cmd: &str, cwd: &str, exit_code: i32) -> bool {
+pub(super) fn execute_able(cmd: &str, exit_code: i32) -> bool {
     if exit_code != bash::Bash::NOT_FOUND {
         return true;
     }
@@ -107,6 +107,7 @@ pub(super) fn execute_able(cmd: &str, cwd: &str, exit_code: i32) -> bool {
         if n == 1 {
             which::which(cmd).ok()
         } else {
+            let cwd = std::env::current_dir().unwrap_or_default();
             RelativePath::from_path(&p).map(|rp| rp.normalize().to_path(cwd)).ok()
         }
     };

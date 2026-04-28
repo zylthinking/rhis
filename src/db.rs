@@ -55,7 +55,14 @@ fn ignored(command: &str) -> bool {
     command.is_empty()
         || command.starts_with(' ')
         || IGNORED.contains(&command)
-        || command.starts_with("rhis")
+        || command.to_lowercase().starts_with("rhis")
+}
+
+pub fn sanitize(raw: &str) -> String {
+    raw.trim_end_matches(['\n', '\r', '\t', ' '])
+        .chars()
+        .filter(|&c| c >= ' ' || c == '\t')
+        .collect()
 }
 
 fn now_secs() -> i64 {
@@ -65,25 +72,26 @@ fn now_secs() -> i64 {
         .as_secs() as i64
 }
 
-pub async fn save_command(command: &str, session_id: &str, dir: &str, exit_code: i32) {
-    if ignored(command) {
+pub async fn save_command(command: &str, session_id: &str, exit_code: i32) {
+    let command = sanitize(command);
+    if ignored(&command) {
         return;
     }
-    if exit_code != 0 && !crate::shell::execute_able(command, dir, exit_code) {
+    if exit_code != 0 && !crate::shell::execute_able(&command, exit_code) {
         return;
     }
 
-    let normalized = normalize::normalize(command);
+    let normalized = normalize::normalize(&command);
     let when = now_secs();
     let pool = pg_pool();
     let schema = &conf::conf_get().database.schema;
 
-    let ebm = execute_by_me(&normalized, session_id, dir).await;
+    let ebm = execute_by_me(&normalized, session_id).await;
 
     let sql = format!(
-        "INSERT INTO {schema}.commands (original, normalized, cnt, when_run, exit_code, selected, dir) \
-         VALUES ($1, $2, 1, $3, $4, $5, $6) \
-         ON CONFLICT (normalized, dir) DO UPDATE SET \
+        "INSERT INTO {schema}.commands (original, normalized, cnt, when_run, exit_code, selected) \
+         VALUES ($1, $2, 1, $3, $4, $5) \
+         ON CONFLICT (normalized) DO UPDATE SET \
              original = EXCLUDED.original, \
              cnt = {schema}.commands.cnt + 1, \
              when_run = EXCLUDED.when_run, \
@@ -96,22 +104,20 @@ pub async fn save_command(command: &str, session_id: &str, dir: &str, exit_code:
         .bind(when)
         .bind(exit_code)
         .bind(ebm as i32)
-        .bind(dir)
         .execute(pool)
         .await;
 }
 
-pub async fn execute_by_me(cmd: &str, session_id: &str, dir: &str) -> bool {
+pub async fn execute_by_me(cmd: &str, session_id: &str) -> bool {
     let pool = pg_pool();
     let schema = &conf::conf_get().database.schema;
     let sql = format!(
         "DELETE FROM {schema}.selected_commands \
-         WHERE cmd = $1 AND session_id = $2 AND dir = $3"
+         WHERE cmd = $1 AND session_id = $2"
     );
     let rows = sqlx::query(&sql)
         .bind(cmd)
         .bind(session_id)
-        .bind(dir)
         .execute(pool)
         .await
         .map(|r| r.rows_affected())
@@ -123,24 +129,21 @@ pub async fn execute_by_me(cmd: &str, session_id: &str, dir: &str) -> bool {
     rows > 0
 }
 
-pub async fn record_selected(cmd: &str, session_id: &str, dir: &str) {
+pub async fn record_selected(cmd: &str, session_id: &str) {
     let pool = pg_pool();
     let schema = &conf::conf_get().database.schema;
     let sql = format!(
-        "INSERT INTO {schema}.selected_commands (cmd, session_id, dir) VALUES ($1, $2, $3)"
+        "INSERT INTO {schema}.selected_commands (cmd, session_id) VALUES ($1, $2)"
     );
     _ = sqlx::query(&sql)
         .bind(cmd)
         .bind(session_id)
-        .bind(dir)
         .execute(pool)
         .await;
 }
 
 pub async fn find_matches(
     pattern: &str,
-    dir: &str,
-    anywhere: bool,
     limit: i64,
     offset: i64,
 ) -> (Vec<Match>, i64) {
@@ -151,13 +154,11 @@ pub async fn find_matches(
 
     let sql = format!(
         "SELECT original, when_run FROM {schema}.commands \
-         WHERE normalized LIKE $1 AND ($2 OR dir = $3) \
-         ORDER BY when_run DESC LIMIT $4 OFFSET $5"
+         WHERE normalized LIKE $1 \
+         ORDER BY when_run DESC LIMIT $2 OFFSET $3"
     );
     let rows = match sqlx::query(&sql)
         .bind(&like)
-        .bind(anywhere)
-        .bind(dir)
         .bind(limit)
         .bind(offset)
         .fetch_all(pool)
@@ -189,12 +190,10 @@ pub async fn find_matches(
 
     let count_sql = format!(
         "SELECT COUNT(*) FROM {schema}.commands \
-         WHERE normalized LIKE $1 AND ($2 OR dir = $3)"
+         WHERE normalized LIKE $1"
     );
     let total: i64 = sqlx::query_scalar(&count_sql)
         .bind(&like)
-        .bind(anywhere)
-        .bind(dir)
         .fetch_one(pool)
         .await
         .unwrap_or(0);
@@ -202,16 +201,59 @@ pub async fn find_matches(
     (commands, total)
 }
 
-pub async fn delete_command(original: &str, dir: &str) {
+pub async fn delete_command(original: &str) {
     let normalized = normalize::normalize(original);
     let pool = pg_pool();
     let schema = &conf::conf_get().database.schema;
-    let sql = format!("DELETE FROM {schema}.commands WHERE normalized = $1 AND dir = $2");
+    let sql = format!("DELETE FROM {schema}.commands WHERE normalized = $1");
     _ = sqlx::query(&sql)
         .bind(&normalized)
-        .bind(dir)
         .execute(pool)
         .await;
+}
+
+pub async fn migrate_insert_batch(entries: &[(String, i32, i64)]) {
+    if entries.is_empty() {
+        return;
+    }
+    let pool = pg_pool();
+    let schema = &conf::conf_get().database.schema;
+
+    let mut values = String::new();
+    for (i, (orig, cnt, when)) in entries.iter().enumerate() {
+        if i > 0 {
+            values.push(',');
+        }
+        let norm = normalize::normalize(orig);
+        let escaped_orig = escape_sql_string(orig);
+        let escaped_norm = escape_sql_string(&norm);
+        values.push_str(&format!(
+            "(E'{escaped_orig}', E'{escaped_norm}', {cnt}, {when}, 0, 0)"
+        ));
+    }
+
+    let sql = format!(
+        "INSERT INTO {schema}.commands (original, normalized, cnt, when_run, exit_code, selected) \
+         VALUES {values} \
+         ON CONFLICT (normalized) DO UPDATE SET \
+             original = EXCLUDED.original, \
+             cnt = {schema}.commands.cnt + EXCLUDED.cnt, \
+             when_run = GREATEST({schema}.commands.when_run, EXCLUDED.when_run)"
+    );
+
+    _ = sqlx::raw_sql(&sql).execute(pool).await;
+}
+
+fn escape_sql_string(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    for c in s.chars() {
+        match c {
+            '\'' => out.push_str("\\'"),
+            '\\' => out.push_str("\\\\"),
+            _ => out.push(c),
+        }
+    }
+    out
 }
 
 #[derive(Debug, Clone)]

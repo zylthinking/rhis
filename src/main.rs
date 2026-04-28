@@ -10,7 +10,6 @@ async fn handle_addition(settings: &Settings) {
     db::save_command(
         &settings.command,
         &settings.sid,
-        &settings.dir,
         settings.exit_code,
     )
     .await;
@@ -39,7 +38,7 @@ async fn main() {
     let config_path = settings
         .config_path
         .clone()
-        .unwrap_or_else(|| "./config.toml".into());
+        .unwrap_or_else(|| shellexpand::tilde("~/.local/share/rhis/config.toml").into_owned());
     conf::conf_init(&config_path);
 
     db::warmup();
