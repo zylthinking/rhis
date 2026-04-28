@@ -5,8 +5,6 @@ use clap::{Parser, Subcommand};
 pub struct Cli {
     #[command(subcommand)]
     pub command: SubCommand,
-    #[arg(long = "sid")]
-    pub sid: Option<String>,
     #[arg(short = 'c', long = "config")]
     pub config: Option<String>,
 }

@@ -71,7 +71,7 @@ fn now_secs() -> i64 {
         .as_secs() as i64
 }
 
-pub async fn save_command(command: &str, session_id: &str, exit_code: i32) {
+pub async fn save_command(command: &str, exit_code: i32) {
     let command = sanitize(command);
     if ignored(&command) {
         return;
@@ -85,58 +85,20 @@ pub async fn save_command(command: &str, session_id: &str, exit_code: i32) {
     let pool = pg_pool();
     let schema = &conf::conf_get().database.schema;
 
-    let ebm = execute_by_me(&normalized, session_id).await;
-
     let sql = format!(
-        "INSERT INTO {schema}.commands (original, normalized, cnt, when_run, exit_code, selected) \
-         VALUES ($1, $2, 1, $3, $4, $5) \
+        "INSERT INTO {schema}.commands (original, normalized, cnt, when_run, exit_code) \
+         VALUES ($1, $2, 1, $3, $4) \
          ON CONFLICT (normalized) DO UPDATE SET \
              original = EXCLUDED.original, \
              cnt = {schema}.commands.cnt + 1, \
              when_run = EXCLUDED.when_run, \
-             exit_code = EXCLUDED.exit_code, \
-             selected = {schema}.commands.selected + EXCLUDED.selected"
+             exit_code = EXCLUDED.exit_code"
     );
     _ = sqlx::query(&sql)
         .bind(command)
         .bind(&normalized)
         .bind(when)
         .bind(exit_code)
-        .bind(ebm as i32)
-        .execute(pool)
-        .await;
-}
-
-pub async fn execute_by_me(cmd: &str, session_id: &str) -> bool {
-    let pool = pg_pool();
-    let schema = &conf::conf_get().database.schema;
-    let sql = format!(
-        "DELETE FROM {schema}.selected_commands \
-         WHERE cmd = $1 AND session_id = $2"
-    );
-    let rows = sqlx::query(&sql)
-        .bind(cmd)
-        .bind(session_id)
-        .execute(pool)
-        .await
-        .map(|r| r.rows_affected())
-        .unwrap_or(0);
-
-    let cleanup = format!("DELETE FROM {schema}.selected_commands WHERE session_id = $1");
-    _ = sqlx::query(&cleanup).bind(session_id).execute(pool).await;
-
-    rows > 0
-}
-
-pub async fn record_selected(cmd: &str, session_id: &str) {
-    let pool = pg_pool();
-    let schema = &conf::conf_get().database.schema;
-    let sql = format!(
-        "INSERT INTO {schema}.selected_commands (cmd, session_id) VALUES ($1, $2)"
-    );
-    _ = sqlx::query(&sql)
-        .bind(cmd)
-        .bind(session_id)
         .execute(pool)
         .await;
 }

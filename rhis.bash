@@ -19,7 +19,6 @@ if [[ -t 0 ]] && [[ "$_RHIS_LOADED" != "loaded" ]]; then
   # Append new history items to .bash_history
   shopt -s histappend
 
-  SID="__sid_place_holder__"
   IDX=0
   function rhis_prompt_command {
       local exit_code=$?
@@ -34,7 +33,7 @@ if [[ -t 0 ]] && [[ "$_RHIS_LOADED" != "loaded" ]]; then
           then
               cmd="${cmd#* }"
               cmd="${cmd##*( )}"
-              HISTFILE=$HISTFILE $EXEUTABLE --sid $SID add --exit ${exit_code} "$cmd"
+              HISTFILE=$HISTFILE $EXEUTABLE add --exit ${exit_code} "$cmd"
           fi
           IDX=$i
       fi
@@ -53,7 +52,7 @@ if [[ -t 0 ]] && [[ "$_RHIS_LOADED" != "loaded" ]]; then
   function rhis_search {
       local cmd=${READLINE_LINE[@]};
       READLINE_LINE= ;
-      HISTFILE=$HISTFILE $EXEUTABLE --sid $SID search --light --bottom "$cmd"
+      HISTFILE=$HISTFILE $EXEUTABLE search --light --bottom "$cmd"
   }
 
   # If this is an interactive shell, take ownership of ctrl-r.

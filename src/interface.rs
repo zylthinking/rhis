@@ -92,7 +92,6 @@ impl<'a> Interface<'a> {
 
         let command = &self.input.command;
         if command.chars().any(|c| !c.is_whitespace()) {
-            crate::runtime().block_on(db::record_selected(command, &self.settings.sid));
             Some(command)
         } else {
             None
@@ -285,7 +284,6 @@ impl<'a> Interface<'a> {
                 .entry(command.last_run)
                 .or_insert_with_key(|&k| Self::explain(k));
             let (bg, fg, hi, when) = Self::candidate_theme(self.settings.lightmode, index == self.selection);
-            let colored = Interface::format_command_text(command, input, width, hi, fg);
             queue!(
                 screen,
                 cursor::MoveTo(1, line as u16),
@@ -294,8 +292,11 @@ impl<'a> Interface<'a> {
                 cursor::MoveTo(1, line as u16),
                 SetForegroundColor(when),
                 Print(format!("{index: >2} ")),
-                SetForegroundColor(fg),
-                Print(colored),
+            )
+            .unwrap();
+            Self::queue_command_text(screen, command, input, width, hi, fg);
+            queue!(
+                screen,
                 cursor::MoveTo(width - 10, line as u16),
                 SetForegroundColor(when),
                 Print(format!("{:>9}", since)),
@@ -520,40 +521,40 @@ impl<'a> Interface<'a> {
         false
     }
 
-    fn format_command_text(command: &Match, target: &str, width: u16, hl: Color, fg: Color) -> String {
+    fn queue_command_text<W: Write>(
+        screen: &mut W,
+        command: &Match,
+        target: &str,
+        width: u16,
+        hl: Color,
+        fg: Color,
+    ) {
         let max_grapheme_length = cmp::max(width - 14, 0);
         let mut out1 = FixedLengthGraphemeString::empty(max_grapheme_length);
         out1.push_grapheme_str(&command.cmd[..]);
         if target.is_empty() {
-            return out1.string;
+            execute!(screen, SetForegroundColor(fg), Print(&out1.string)).unwrap();
+            return;
         }
 
         let cmd = &out1.string;
-        let mut out2 = FixedLengthGraphemeString::empty(0);
         let mut prev: usize = 0;
         for &(start, mut end) in &command.match_bounds {
             if start >= cmd.len() {
                 break;
             }
-
             if end > cmd.len() {
                 end = cmd.len();
             }
-
             if prev != start {
-                out2.push_str(&cmd[prev..start]);
+                execute!(screen, SetForegroundColor(fg), Print(&cmd[prev..start])).unwrap();
             }
-
-            execute!(out2, SetForegroundColor(hl)).unwrap();
-            out2.push_str(&cmd[start..end]);
-            execute!(out2, SetForegroundColor(fg)).unwrap();
+            execute!(screen, SetForegroundColor(hl), Print(&cmd[start..end])).unwrap();
             prev = end;
         }
-
         if prev != cmd.len() {
-            out2.push_str(&cmd[prev..]);
+            execute!(screen, SetForegroundColor(fg), Print(&cmd[prev..])).unwrap();
         }
-        out2.string
     }
 
     fn line_range<const N: i32>(&self, height: u16) -> (i16, i16) {

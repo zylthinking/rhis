@@ -10,7 +10,6 @@ pub enum Mode {
 
 pub struct Settings {
     pub mode: Mode,
-    pub sid: String,
     pub command: String,
     pub exit_code: i32,
     pub lightmode: bool,
@@ -23,7 +22,6 @@ impl Default for Settings {
         Settings {
             mode: Mode::Add,
             command: String::new(),
-            sid: String::new(),
             exit_code: 0,
             lightmode: false,
             bottom: false,
@@ -40,7 +38,6 @@ impl Settings {
             ..Default::default()
         };
 
-        settings.sid = cli.sid.unwrap_or("".into());
         match cli.command {
             SubCommand::Add {
                 command,

@@ -4,12 +4,10 @@ use rhis::{
     interface::Interface,
     settings::{Mode, Settings},
 };
-use std::time::{SystemTime, UNIX_EPOCH};
 
 async fn handle_addition(settings: &Settings) {
     db::save_command(
         &settings.command,
-        &settings.sid,
         settings.exit_code,
     )
     .await;
@@ -55,7 +53,7 @@ async fn main() {
         }
         Mode::Init => {
             let mut s: String = "".into();
-            let mut script = include_str!("../rhis.bash");
+            let script = include_str!("../rhis.bash");
             if !settings.bottom {
                 let offset = script.find("--bottom").unwrap();
                 s = script.into();
@@ -70,18 +68,11 @@ async fn main() {
                 s.replace_range(offset..offset + 8, "");
             }
 
-            let offset = script.find("__sid_place_holder__").unwrap();
-            let time = SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .unwrap()
-                .as_nanos();
-            let sid = format!("{time}");
             if s.is_empty() {
-                s = script.into();
+                print!("{}", script);
+            } else {
+                print!("{}", s);
             }
-            s.replace_range(offset..offset + 20, sid.as_str());
-            script = s.as_str();
-            print!("{}", script);
         }
     }
 }
