@@ -30,18 +30,7 @@ fn read_ignoring_utf_errors<const B: bool>(path: &Path) -> Result<String, io::Er
 }
 
 fn has_leading_timestamp(line: &str) -> bool {
-    let mut matched_chars = 0;
-    for (index, c) in line.chars().enumerate() {
-        if index > 11 {
-            break;
-        }
-
-        if index == 0 && c != '#' || !c.is_ascii_digit() {
-            break;
-        }
-        matched_chars += 1;
-    }
-    matched_chars == 11
+    line.len() == 11 && line.starts_with('#') && line[1..].chars().all(|c| c.is_ascii_digit())
 }
 
 fn history_file_path() -> Option<PathBuf> {

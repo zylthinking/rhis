@@ -1,8 +1,8 @@
 use crate::conf;
 use crate::normalize;
 use sqlx::{
-    PgPool, Row,
     postgres::{PgConnectOptions, PgPoolOptions},
+    PgPool, Row,
 };
 use std::sync::OnceLock;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -52,7 +52,10 @@ fn pg_pool() -> &'static PgPool {
 
 fn ignored(command: &str) -> bool {
     const IGNORED: [&str; 6] = ["pwd", "ls", "cd", "cd ..", "clear", "history"];
-    command.is_empty() || command.starts_with(' ') || IGNORED.contains(&command) || command.starts_with("rhis")
+    command.is_empty()
+        || command.starts_with(' ')
+        || IGNORED.contains(&command)
+        || command.starts_with("rhis")
 }
 
 fn now_secs() -> i64 {
@@ -167,7 +170,7 @@ pub async fn find_matches(
         }
     };
 
-    let mut commands: Vec<Match> = rows
+    let commands: Vec<Match> = rows
         .iter()
         .map(|row| {
             let original: String = row.get(0);
@@ -196,7 +199,6 @@ pub async fn find_matches(
         .await
         .unwrap_or(0);
 
-    commands.sort_by(|a, b| b.last_run.cmp(&a.last_run));
     (commands, total)
 }
 

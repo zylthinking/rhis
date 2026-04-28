@@ -40,7 +40,7 @@ fn tokenize(command: &str) -> Vec<String> {
 }
 
 fn is_flag(t: &str) -> bool {
-    (t.starts_with('-') || t.starts_with("--")) && t != "-" && !t.starts_with("---") && t.len() > 1
+    (t.starts_with('-') || t.starts_with("--")) && t != "-" && t != "--" && !t.starts_with("---") && t.len() > 1
 }
 
 pub fn normalize(command: &str) -> String {

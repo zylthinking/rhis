@@ -17,6 +17,7 @@ use crossterm::{
 use humantime::format_duration;
 use std::{
     cmp,
+    collections::HashMap,
     io::{stdout, Write},
     string::String,
 };
@@ -35,6 +36,7 @@ pub struct Interface<'a> {
     height: u16,
     total_count: i64,
     has_more: bool,
+    explain_cache: HashMap<i64, String>,
 }
 
 pub enum MoveSelection {
@@ -87,6 +89,7 @@ impl<'a> Interface<'a> {
             height: h,
             total_count: 0,
             has_more: false,
+            explain_cache: HashMap::new(),
         }
     }
 
@@ -117,6 +120,7 @@ impl<'a> Interface<'a> {
         self.has_more = (PAGE_SIZE as i64) < total;
         self.selection = 0;
         self.offset = 0;
+        self.explain_cache.clear();
     }
 
     fn load_more(&mut self) {
@@ -285,7 +289,7 @@ impl<'a> Interface<'a> {
             return;
         }
 
-        let (mut top, mut bottom) = (self.offset, self.offset + rows);
+        let (mut top, mut bottom) = (self.offset, self.offset + rows - 1);
         self.selection = cmp::min(self.selection, if self.matches.is_empty() { 0 } else { self.matches.len() - 1 });
         if resized {
             if self.selection > bottom {
@@ -316,7 +320,10 @@ impl<'a> Interface<'a> {
 
             let line = self.command_line_index((index - self.offset) as i16) + area.0;
             let command = &self.matches[index];
-            let since = &Self::explain(command.last_run);
+            let since = self
+                .explain_cache
+                .entry(command.last_run)
+                .or_insert_with_key(|&k| Self::explain(k));
             let (bg, fg, hi, when) = Self::candidate_theme(self.settings.lightmode, index == self.selection);
             let colored = Interface::format_command_text(command, input, width, hi, fg);
             queue!(
