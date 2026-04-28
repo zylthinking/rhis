@@ -32,8 +32,9 @@ fn handle_search(settings: &Settings) {
     }
 }
 
-#[tokio::main]
+#[tokio::main(flavor = "multi_thread")]
 async fn main() {
+    rhis::set_runtime(tokio::runtime::Handle::current());
     let settings = Settings::parse_args();
     let config_path = settings
         .config_path

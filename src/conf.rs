@@ -23,6 +23,16 @@ pub fn conf_init(path: &str) {
         std::fs::read_to_string(path).unwrap_or_else(|_| panic!("failed to read config: {path}"));
     let config: Config = toml::from_str(&content)
         .unwrap_or_else(|e| panic!("failed to parse config '{path}': {e}"));
+
+    let schema = &config.database.schema;
+    if schema.is_empty()
+        || !schema
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '_')
+    {
+        panic!("invalid schema name: {schema}");
+    }
+
     CONFIG
         .set(config)
         .unwrap_or_else(|_| panic!("config already initialized"));

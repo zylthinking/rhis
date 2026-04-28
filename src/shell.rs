@@ -8,22 +8,20 @@ trait Shell {
 }
 
 pub(super) mod bash {
-    use std::vec;
-
     pub struct Bash {
         fns: Vec<&'static dyn Fn(&mut Self, u8)>,
-        cmd: Option<Vec<u8>>,
+        cmd: Vec<u8>,
     }
 
     impl Bash {
         pub fn new() -> Self {
             Bash {
                 fns: vec![&Self::bare],
-                cmd: Some(vec![]),
+                cmd: Vec::new(),
             }
         }
 
-        fn cmd_array(&mut self) -> &mut Vec<u8> { self.cmd.as_mut().unwrap() }
+        fn cmd_array(&mut self) -> &mut Vec<u8> { &mut self.cmd }
 
         fn bare(&mut self, byte: u8) {
             if byte == b' ' || byte == b'\t' {
@@ -73,7 +71,7 @@ pub(super) mod bash {
         fn arg0_from_cmdline(&mut self, line: &str) -> String {
             let bytes = line.as_bytes();
             let nb = bytes.len();
-            self.cmd_array().reserve(nb);
+            self.cmd.reserve(nb);
 
             let mut nr = self.fns.len();
             for &b in bytes {
@@ -83,7 +81,9 @@ pub(super) mod bash {
                     break;
                 }
             }
-            String::from_utf8(self.cmd.take().unwrap()).unwrap()
+            let result = String::from_utf8(std::mem::take(&mut self.cmd)).unwrap();
+            self.cmd.reserve(128);
+            result
         }
     }
 }

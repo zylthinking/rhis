@@ -6,26 +6,10 @@ use std::{
     path::{Path, PathBuf},
 };
 
-fn read_ignoring_utf_errors<const B: bool>(path: &Path) -> Result<String, io::Error> {
-    let f = File::open(path);
-    if f.is_err() {
-        let e = f.err().unwrap();
-        if B {
-            panic!("{}", e);
-        }
-        return Err(e);
-    }
-    let mut f = f.unwrap();
-
+fn read_history_file(path: &Path) -> Result<String, io::Error> {
+    let mut f = File::open(path)?;
     let mut buffer = Vec::new();
-    let r = f.read_to_end(&mut buffer);
-    if r.is_err() {
-        let e = r.err().unwrap();
-        if B {
-            panic!("{}", e);
-        }
-        return Err(e);
-    }
+    f.read_to_end(&mut buffer)?;
     Ok(String::from_utf8_lossy(&buffer).to_string())
 }
 
@@ -34,19 +18,14 @@ fn has_leading_timestamp(line: &str) -> bool {
 }
 
 fn history_file_path() -> Option<PathBuf> {
-    let path = PathBuf::from(env::var("HISTFILE").unwrap_or("".into()));
+    let path = PathBuf::from(env::var("HISTFILE").unwrap_or_default());
     fs::canonicalize(path).ok()
 }
 
-fn __full_history<const B: bool>(path: &Path) -> Option<Vec<String>> {
-    let history_contents = read_ignoring_utf_errors::<B>(path);
-    if history_contents.is_err() {
-        return None;
-    }
-
+fn load_history(path: &Path) -> Option<Vec<String>> {
+    let contents = read_history_file(path).ok()?;
     Some(
-        history_contents
-            .unwrap()
+        contents
             .split('\n')
             .filter(|line| !has_leading_timestamp(line) && !line.is_empty())
             .map(|cmd| cmd.trim().to_string())
@@ -55,28 +34,26 @@ fn __full_history<const B: bool>(path: &Path) -> Option<Vec<String>> {
 }
 
 pub fn full_history() -> Vec<String> {
-    let path = history_file_path().unwrap();
-    __full_history::<true>(path.as_path()).unwrap()
+    let Some(path) = history_file_path() else {
+        return vec![];
+    };
+    load_history(&path).unwrap_or_default()
 }
 
 pub fn delete_lines(command: &str) {
-    let opt = history_file_path();
-    if opt.is_none() {
+    let Some(path) = history_file_path() else {
         return;
-    }
-
-    let path = &opt.unwrap();
-    let commands = __full_history::<false>(path.as_path());
-    if commands.is_none() {
+    };
+    let Some(commands) = load_history(&path) else {
         return;
-    }
-
-    let commands = commands.unwrap();
+    };
     if commands.is_empty() {
         return;
     }
-
-    let lines =
-        commands.into_iter().filter(|cmd| !command.eq(cmd)).chain(Some(String::from(""))).collect::<Vec<String>>();
-    let _ = fs::write(path, lines.join("\n"));
+    let lines: Vec<String> = commands
+        .into_iter()
+        .filter(|cmd| command != cmd)
+        .chain(Some(String::new()))
+        .collect();
+    let _ = fs::write(&path, lines.join("\n"));
 }

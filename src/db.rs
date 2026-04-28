@@ -6,7 +6,6 @@ use sqlx::{
 };
 use std::sync::OnceLock;
 use std::time::{SystemTime, UNIX_EPOCH};
-use tokio::runtime::Handle;
 use tokio::task;
 
 pub fn warmup() {
@@ -17,7 +16,7 @@ fn pg_pool() -> &'static PgPool {
     static POOL: OnceLock<Option<PgPool>> = OnceLock::new();
     let Some(pool) = POOL.get_or_init(|| {
         task::block_in_place(move || {
-            Handle::current().block_on(async {
+            crate::runtime().block_on(async {
                 let c = &conf::conf_get().database;
                 let opt = PgConnectOptions::new()
                     .host(&c.host)
@@ -214,50 +213,6 @@ pub async fn delete_command(original: &str) {
         .bind(&normalized)
         .execute(pool)
         .await;
-}
-
-pub async fn migrate_insert_batch(entries: &[(String, i32, i64)]) {
-    if entries.is_empty() {
-        return;
-    }
-    let pool = pg_pool();
-    let schema = &conf::conf_get().database.schema;
-
-    let mut values = String::new();
-    for (i, (orig, cnt, when)) in entries.iter().enumerate() {
-        if i > 0 {
-            values.push(',');
-        }
-        let norm = normalize::normalize(orig);
-        let escaped_orig = escape_sql_string(orig);
-        let escaped_norm = escape_sql_string(&norm);
-        values.push_str(&format!(
-            "(E'{escaped_orig}', E'{escaped_norm}', {cnt}, {when}, 0, 0)"
-        ));
-    }
-
-    let sql = format!(
-        "INSERT INTO {schema}.commands (original, normalized, cnt, when_run, exit_code, selected) \
-         VALUES {values} \
-         ON CONFLICT (normalized) DO UPDATE SET \
-             original = EXCLUDED.original, \
-             cnt = {schema}.commands.cnt + EXCLUDED.cnt, \
-             when_run = GREATEST({schema}.commands.when_run, EXCLUDED.when_run)"
-    );
-
-    _ = sqlx::raw_sql(&sql).execute(pool).await;
-}
-
-fn escape_sql_string(s: &str) -> String {
-    let mut out = String::with_capacity(s.len());
-    for c in s.chars() {
-        match c {
-            '\'' => out.push_str("\\'"),
-            '\\' => out.push_str("\\\\"),
-            _ => out.push(c),
-        }
-    }
-    out
 }
 
 #[derive(Debug, Clone)]

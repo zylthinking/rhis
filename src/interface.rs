@@ -92,8 +92,7 @@ impl<'a> Interface<'a> {
 
         let command = &self.input.command;
         if command.chars().any(|c| !c.is_whitespace()) {
-            let rt = tokio::runtime::Handle::current();
-            rt.block_on(db::record_selected(command, &self.settings.sid));
+            crate::runtime().block_on(db::record_selected(command, &self.settings.sid));
             Some(command)
         } else {
             None
@@ -101,8 +100,7 @@ impl<'a> Interface<'a> {
     }
 
     fn load_initial_matches(&mut self) {
-        let rt = tokio::runtime::Handle::current();
-        let (matches, total) = rt.block_on(db::find_matches(
+        let (matches, total) = crate::runtime().block_on(db::find_matches(
             &self.input.command,
             PAGE_SIZE as i64,
             0,
@@ -120,8 +118,7 @@ impl<'a> Interface<'a> {
             return;
         }
         let offset = self.matches.len() as i64;
-        let rt = tokio::runtime::Handle::current();
-        let (more, _total) = rt.block_on(db::find_matches(
+        let (more, _total) = crate::runtime().block_on(db::find_matches(
             &self.input.command,
             PAGE_SIZE as i64,
             offset,
