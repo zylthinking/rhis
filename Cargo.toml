@@ -24,7 +24,7 @@ libc = "0.2"
 relative-path = "1.7"
 serde = { version = "1", features = ["derive"] }
 shellexpand = "2.1"
-sqlx = { version = "0.8", features = ["postgres", "runtime-tokio"] }
+sqlx = { version = "0.8.3", features = ["postgres", "runtime-tokio"] }
 tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
 toml = "0.8"
 unicode-segmentation = "1.9"
