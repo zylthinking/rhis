@@ -1,4 +1,7 @@
-use crate::{history::db_extensions, network::Network, path_update_helpers, settings::Settings, shell, shell_history};
+use crate::{
+    history::db_extensions, network::Network, path_update_helpers, settings::Settings, shell,
+    shell_history,
+};
 use rusqlite::{named_params, Connection, Transaction};
 use std::{
     fs,
@@ -35,7 +38,8 @@ impl History {
         let path = Settings::db_path();
 
         let conn = if path.exists() {
-            Connection::open(&path).unwrap_or_else(|_| panic!("Unable to open {}", path.as_path().display()))
+            Connection::open(&path)
+                .unwrap_or_else(|_| panic!("Unable to open {}", path.as_path().display()))
         } else {
             History::from_shell_history()
         };
@@ -58,8 +62,17 @@ impl History {
             || command.starts_with("rhis")
     }
 
-    fn add_new_cmd(trans: &Transaction, dir: Option<&str>, command: &String, exit_code: i32, selected: i32) {
-        let when = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs() as i64;
+    fn add_new_cmd(
+        trans: &Transaction,
+        dir: Option<&str>,
+        command: &String,
+        exit_code: i32,
+        selected: i32,
+    ) {
+        let when = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_secs() as i64;
         let (failed, exit_code) = if exit_code == 0 { (0, 1) } else { (when, 0) };
 
         trans
@@ -83,7 +96,11 @@ impl History {
     }
 
     fn add_commands(
-        connection: &mut Connection, dir: Option<&str>, exit_code: i32, selected: i32, commands: &Vec<String>,
+        connection: &mut Connection,
+        dir: Option<&str>,
+        exit_code: i32,
+        selected: i32,
+        commands: &Vec<String>,
     ) {
         let transaction = connection.transaction().unwrap();
         for command in commands {
@@ -112,12 +129,19 @@ impl History {
             .execute(
                 "DELETE FROM selected_commands \
                  WHERE cmd = :cmd AND session_id = :session_id AND dir = :dir",
-                &[(":cmd", command), (":session_id", session_id), (":dir", dir)],
+                &[
+                    (":cmd", command),
+                    (":session_id", session_id),
+                    (":dir", dir),
+                ],
             )
             .unwrap_or(0);
 
         self.conn
-            .execute("DELETE FROM selected_commands WHERE session_id = :session_id", &[(":session_id", session_id)])
+            .execute(
+                "DELETE FROM selected_commands WHERE session_id = :session_id",
+                &[(":session_id", session_id)],
+            )
             .unwrap_or(0);
 
         rows_affected > 0
@@ -133,7 +157,8 @@ impl History {
     }
 
     pub fn possibly_update_paths(&self, command: &str, dir: &str) {
-        let is_move = |c: &str| c.to_lowercase().starts_with("mv ") && !c.contains('*') && !c.contains('?');
+        let is_move =
+            |c: &str| c.to_lowercase().starts_with("mv ") && !c.contains('*') && !c.contains('?');
         if !is_move(command) {
             return;
         }
@@ -158,7 +183,10 @@ impl History {
                 if let Some(utf8_basename) = basename.to_str() {
                     let maybe_moved_directory = path_to.join(utf8_basename);
                     if maybe_moved_directory.exists() && maybe_moved_directory.is_dir() {
-                        self.update_paths(&normalized_from, maybe_moved_directory.to_str().unwrap());
+                        self.update_paths(
+                            &normalized_from,
+                            maybe_moved_directory.to_str().unwrap(),
+                        );
                         return;
                     }
                 } else {
@@ -186,15 +214,21 @@ impl History {
 
         let mut statement = self.conn.prepare(query).unwrap();
         let command_iter = statement
-            .query_map(named_params! { ":like": &like_query, ":limit": &num }, |row| {
-                let text: String = row.get(0).unwrap();
-                let bounds = text.match_indices(cmd).map(|(index, _)| (index, index + cmd.len())).collect::<Vec<_>>();
-                Ok(Command {
-                    cmd: text,
-                    last_run: row.get(1).unwrap(),
-                    match_bounds: bounds,
-                })
-            })
+            .query_map(
+                named_params! { ":like": &like_query, ":limit": &num },
+                |row| {
+                    let text: String = row.get(0).unwrap();
+                    let bounds = text
+                        .match_indices(cmd)
+                        .map(|(index, _)| (index, index + cmd.len()))
+                        .collect::<Vec<_>>();
+                    Ok(Command {
+                        cmd: text,
+                        last_run: row.get(1).unwrap(),
+                        match_bounds: bounds,
+                    })
+                },
+            )
             .unwrap();
 
         let mut names = Vec::new();
@@ -208,14 +242,20 @@ impl History {
     }
 
     pub fn build_cache_table(&self, dir: &str, anywhere: bool) {
-        self.conn.execute("PRAGMA temp_store = MEMORY;", []).unwrap();
-        self.conn.execute("DROP TABLE IF EXISTS temp.contextual_commands;", []).unwrap();
+        self.conn
+            .execute("PRAGMA temp_store = MEMORY;", [])
+            .unwrap();
+        self.conn
+            .execute("DROP TABLE IF EXISTS temp.contextual_commands;", [])
+            .unwrap();
 
         let (mut when_run_min, when_run_max): (i64, i64) = self
             .conn
-            .query_row("SELECT IFNULL(MIN(when_run), 0), IFNULL(MAX(when_run), 0) FROM commands", [], |row| {
-                Ok((row.get_unwrap(0), row.get_unwrap(1)))
-            })
+            .query_row(
+                "SELECT IFNULL(MIN(when_run), 0), IFNULL(MAX(when_run), 0) FROM commands",
+                [],
+                |row| Ok((row.get_unwrap(0), row.get_unwrap(1))),
+            )
             .unwrap();
 
         if when_run_max == when_run_min {
@@ -224,7 +264,11 @@ impl History {
 
         let max_occurrences: f64 = self
             .conn
-            .query_row("SELECT SUM(cnt) AS c FROM commands GROUP BY cmd ORDER BY c DESC LIMIT 1", [], |row| row.get(0))
+            .query_row(
+                "SELECT SUM(cnt) AS c FROM commands GROUP BY cmd ORDER BY c DESC LIMIT 1",
+                [],
+                |row| row.get(0),
+            )
             .unwrap_or(1.0);
 
         let max_selected_occurrences: f64 = self
@@ -238,7 +282,11 @@ impl History {
 
         let mut max_length = self
             .conn
-            .query_row("SELECT IFNULL(MAX(LENGTH(cmd)), 0) FROM commands", [], |row| row.get(0))
+            .query_row(
+                "SELECT IFNULL(MAX(LENGTH(cmd)), 0) FROM commands",
+                [],
+                |row| row.get(0),
+            )
             .unwrap_or(100);
 
         if max_length == 0 {
@@ -288,8 +336,18 @@ impl History {
 
     pub fn delete_command(&mut self, command: &str) {
         let transaction = self.conn.transaction().unwrap();
-        transaction.execute("DELETE FROM commands WHERE cmd = :command", &[(":command", &command)]).unwrap();
-        transaction.execute("DELETE FROM contextual_commands WHERE cmd = :command", &[(":command", &command)]).unwrap();
+        transaction
+            .execute(
+                "DELETE FROM commands WHERE cmd = :command",
+                &[(":command", &command)],
+            )
+            .unwrap();
+        transaction
+            .execute(
+                "DELETE FROM contextual_commands WHERE cmd = :command",
+                &[(":command", &command)],
+            )
+            .unwrap();
         transaction.commit().unwrap();
     }
 
@@ -312,8 +370,8 @@ impl History {
         let db_dir = db_path.parent().unwrap();
         fs::create_dir_all(db_dir).unwrap_or_else(|_| panic!("Unable to create {:?}", db_dir));
 
-        let mut connection =
-            Connection::open(&db_path).unwrap_or_else(|_| panic!("Unable to create history DB at {:?}", &db_path));
+        let mut connection = Connection::open(&db_path)
+            .unwrap_or_else(|_| panic!("Unable to create history DB at {:?}", &db_path));
         db_extensions::add_db_functions(&connection);
 
         connection

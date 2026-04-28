@@ -38,5 +38,7 @@ pub enum SubCommand {
 }
 
 impl Cli {
-    pub fn is_init(&self) -> bool { matches!(self.command, SubCommand::Init { .. }) }
+    pub fn is_init(&self) -> bool {
+        matches!(self.command, SubCommand::Init { .. })
+    }
 }
