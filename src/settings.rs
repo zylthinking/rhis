@@ -1,7 +1,5 @@
 use crate::cli::{Cli, SubCommand};
 use clap::Parser;
-use directories_next::ProjectDirs;
-use std::path::PathBuf;
 
 #[derive(Debug)]
 pub enum Mode {
@@ -15,10 +13,10 @@ pub struct Settings {
     pub sid: String,
     pub command: String,
     pub dir: String,
-    pub results: u16,
     pub exit_code: i32,
     pub lightmode: bool,
     pub bottom: bool,
+    pub config_path: Option<String>,
 }
 
 impl Default for Settings {
@@ -28,10 +26,10 @@ impl Default for Settings {
             command: String::new(),
             sid: String::new(),
             dir: String::new(),
-            results: 40,
             exit_code: 0,
             lightmode: false,
             bottom: false,
+            config_path: None,
         }
     }
 }
@@ -39,7 +37,10 @@ impl Default for Settings {
 impl Settings {
     pub fn parse_args() -> Settings {
         let cli = Cli::parse();
-        let mut settings = Settings { ..Default::default() };
+        let mut settings = Settings {
+            config_path: cli.config,
+            ..Default::default()
+        };
 
         settings.sid = cli.sid.unwrap_or("".into());
         match cli.command {
@@ -50,7 +51,7 @@ impl Settings {
             } => {
                 settings.mode = Mode::Add;
                 settings.exit_code = exit;
-                settings.dir = directory.unwrap();
+                settings.dir = directory.unwrap_or_default();
                 if !command.is_empty() {
                     settings.command = command.join(" ").trim().into();
                 }
@@ -63,7 +64,7 @@ impl Settings {
                 light,
             } => {
                 settings.mode = Mode::Search;
-                settings.dir = directory.unwrap();
+                settings.dir = directory.unwrap_or_default();
                 if !command.is_empty() {
                     settings.command = command.join(" ").trim().into();
                 }
@@ -79,10 +80,5 @@ impl Settings {
         }
 
         settings
-    }
-
-    pub fn db_path() -> PathBuf {
-        let data_dir = ProjectDirs::from("", "", "rhis").unwrap().data_dir().to_path_buf();
-        data_dir.join(PathBuf::from("history.db"))
     }
 }

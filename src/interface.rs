@@ -1,7 +1,8 @@
 use crate::{
     command_input::{CommandInput, Move},
+    db,
     fixed_length_grapheme_string::FixedLengthGraphemeString,
-    history::{Command, History},
+    history::Match,
     history_cleaner,
     settings::Settings,
 };
@@ -20,18 +21,20 @@ use std::{
     string::String,
 };
 
+const PAGE_SIZE: usize = 100;
+
 pub struct Interface<'a> {
-    history: &'a mut History,
     settings: &'a Settings,
     input: CommandInput,
     selection: usize,
     offset: usize,
-    matches: Vec<Command>,
+    matches: Vec<Match>,
     menu_mode: MenuMode,
-    rank: bool,
     anywhere: bool,
     width: u16,
     height: u16,
+    total_count: i64,
+    has_more: bool,
 }
 
 pub enum MoveSelection {
@@ -53,13 +56,7 @@ impl MenuMode {
             return String::from("Delete selected command from the history? (Y/N)");
         }
 
-        menu_text.push_str(" | ⏎ - Run | TAB - Edit | ");
-        match interface.rank {
-            true => menu_text.push_str("F1 - Rank Sort | "),
-            _ => menu_text.push_str("F1 - Time Sort | "),
-        }
-
-        menu_text.push_str("F2 - Delete | ");
+        menu_text.push_str(" | ⏎ - Run | TAB - Edit | F2 - Delete | ");
         match interface.anywhere {
             true => menu_text.push_str("F3 - All Directories"),
             _ => menu_text.push_str("F3 - This Directory"),
@@ -77,36 +74,72 @@ impl MenuMode {
 }
 
 impl<'a> Interface<'a> {
-    pub fn new(settings: &'a Settings, history: &'a mut History, w: u16, h: u16) -> Interface<'a> {
+    pub fn new(settings: &'a Settings, w: u16, h: u16) -> Interface<'a> {
         Interface {
-            history,
             settings,
             input: CommandInput::from(settings.command.to_owned(), 2 * w - 4),
             selection: 0,
             offset: 0,
             matches: Vec::new(),
             menu_mode: MenuMode::Normal,
-            rank: true,
             anywhere: true,
             width: w,
             height: h,
+            total_count: 0,
+            has_more: false,
         }
     }
 
     pub fn display(&mut self) -> Option<&String> {
-        self.build_cache_table();
         self.select();
 
         let command = &self.input.command;
         if command.chars().any(|c| !c.is_whitespace()) {
-            self.history.record_selected_from_ui(command, &self.settings.sid, &self.settings.dir);
-            Some(&command)
+            let rt = tokio::runtime::Handle::current();
+            rt.block_on(db::record_selected(command, &self.settings.sid, &self.settings.dir));
+            Some(command)
         } else {
             None
         }
     }
 
-    fn build_cache_table(&self) { self.history.build_cache_table(&self.settings.dir, self.anywhere); }
+    fn load_initial_matches(&mut self) {
+        let rt = tokio::runtime::Handle::current();
+        let (matches, total) = rt.block_on(db::find_matches(
+            &self.input.command,
+            &self.settings.dir,
+            self.anywhere,
+            PAGE_SIZE as i64,
+            0,
+        ));
+        self.matches = matches;
+        self.total_count = total;
+        self.has_more = (PAGE_SIZE as i64) < total;
+        self.selection = 0;
+        self.offset = 0;
+    }
+
+    fn load_more(&mut self) {
+        if !self.has_more {
+            return;
+        }
+        let offset = self.matches.len() as i64;
+        let rt = tokio::runtime::Handle::current();
+        let (more, _total) = rt.block_on(db::find_matches(
+            &self.input.command,
+            &self.settings.dir,
+            self.anywhere,
+            PAGE_SIZE as i64,
+            offset,
+        ));
+        if more.is_empty() {
+            self.has_more = false;
+        } else {
+            self.total_count = _total;
+            self.matches.extend(more);
+            self.has_more = (self.matches.len() as i64) < _total;
+        }
+    }
 
     fn menubar<W: Write>(&self, screen: &mut W, width: u16, height: u16) {
         let indx = self.line_range::<1>(height);
@@ -154,8 +187,13 @@ impl<'a> Interface<'a> {
 
         let cmd = self.input.command.as_str();
         if B {
-            queue!(screen, cursor::MoveTo(1, indx.0 as u16), SetForegroundColor(fg), Print(format!("$ {}", cmd)),)
-                .unwrap();
+            queue!(
+                screen,
+                cursor::MoveTo(1, indx.0 as u16),
+                SetForegroundColor(fg),
+                Print(format!("$ {}", cmd)),
+            )
+            .unwrap();
         }
         let mut pos = (self.input.cursor as u16 + 3, indx.0 as u16);
         pos = Self::trans_position(width, pos);
@@ -180,9 +218,13 @@ impl<'a> Interface<'a> {
 
     fn explain(tms: i64) -> String {
         format_duration(
-            Duration::minutes(Utc::now().signed_duration_since(Utc.timestamp_opt(tms, 0).unwrap()).num_minutes())
-                .to_std()
-                .unwrap(),
+            Duration::minutes(
+                Utc::now()
+                    .signed_duration_since(Utc.timestamp_opt(tms, 0).unwrap())
+                    .num_minutes(),
+            )
+            .to_std()
+            .unwrap(),
         )
         .to_string()
         .split(' ')
@@ -204,6 +246,33 @@ impl<'a> Interface<'a> {
         .join(" ")
     }
 
+    fn footer<W: Write>(&self, screen: &mut W, height: u16) {
+        let indx = self.line_range::<5>(height);
+        let max = cmp::max(indx.0, indx.1);
+        if max == -1 {
+            return;
+        }
+        let line = if self.settings.bottom {
+            cmp::min(indx.0, indx.1)
+        } else {
+            max
+        };
+
+        let total = self.total_count as usize;
+        let loaded = self.matches.len();
+        let more = if self.has_more { "+" } else { "" };
+        let status = format!("{loaded}{more}/{total}");
+
+        queue!(
+            screen,
+            cursor::MoveTo(1, line as u16),
+            SetForegroundColor(Color::DarkGrey),
+            Print(status),
+            SetForegroundColor(Color::Reset),
+        )
+        .unwrap();
+    }
+
     fn results<W: Write>(&mut self, screen: &mut W, mut idx: i32, width: u16, height: u16, resized: bool) {
         let area = self.line_range::<5>(height);
         let (min, max) = (cmp::min(area.0, area.1), cmp::max(area.0, area.1));
@@ -212,8 +281,12 @@ impl<'a> Interface<'a> {
         }
 
         let rows = (max - min) as usize;
+        if rows == 0 {
+            return;
+        }
+
         let (mut top, mut bottom) = (self.offset, self.offset + rows);
-        self.selection = cmp::min(self.selection, self.matches.len() - 1);
+        self.selection = cmp::min(self.selection, if self.matches.is_empty() { 0 } else { self.matches.len() - 1 });
         if resized {
             if self.selection > bottom {
                 self.offset = self.selection - rows;
@@ -266,12 +339,6 @@ impl<'a> Interface<'a> {
         }
     }
 
-    #[allow(unused)]
-    fn debug<W: Write, S: Into<String>>(&self, screen: &mut W, s: S) {
-        queue!(screen, cursor::MoveTo(0, 0), Clear(ClearType::CurrentLine), Print(s.into())).unwrap();
-        screen.flush().unwrap();
-    }
-
     fn move_selection(&mut self, direction: MoveSelection) {
         let n1 = if self.settings.bottom { -1 } else { 1 };
         let n2 = match direction {
@@ -294,9 +361,9 @@ impl<'a> Interface<'a> {
         }
 
         if run {
-            self.input.command.push_str("\n");
+            self.input.command.push('\n');
         } else {
-            self.input.command.push_str("\t");
+            self.input.command.push('\t');
         }
     }
 
@@ -312,22 +379,14 @@ impl<'a> Interface<'a> {
     fn delete_selection(&mut self) {
         if !self.matches.is_empty() {
             let command = &self.matches[self.selection];
-            history_cleaner::clean(self.history, &command.cmd);
-            self.refresh_matches(false);
+            history_cleaner::clean(&command.cmd, &self.settings.dir);
+            self.load_initial_matches();
         }
-    }
-
-    fn refresh_matches(&mut self, reset_selection: bool) {
-        if reset_selection {
-            self.selection = 0;
-            self.offset = 0;
-        }
-        self.matches = self.history.find_matches(&self.input.command, self.settings.results as i16, self.rank);
     }
 
     fn switch_result_filter(&mut self) {
         self.anywhere = !self.anywhere;
-        self.build_cache_table();
+        self.load_initial_matches();
     }
 
     fn key_code_handler(&mut self, key_event: KeyEvent) -> bool {
@@ -363,8 +422,12 @@ impl<'a> Interface<'a> {
         }
     }
 
+    fn needs_more(&self) -> bool {
+        self.has_more && self.selection + 10 >= self.matches.len()
+    }
+
     fn select(&mut self) {
-        self.refresh_matches(true);
+        self.load_initial_matches();
 
         let mut screen = stdout();
         terminal::enable_raw_mode().unwrap();
@@ -379,9 +442,11 @@ impl<'a> Interface<'a> {
                 self.results(&mut screen, -1, self.width, self.height, resized);
                 self.menubar(&mut screen, self.width, self.height);
                 self.prompt::<true, _>(&mut screen, self.width, self.height);
+                self.footer(&mut screen, self.height);
             } else {
                 self.results(&mut screen, idx, self.width, self.height, false);
                 self.prompt::<false, _>(&mut screen, self.width, self.height);
+                self.footer(&mut screen, self.height);
             }
             queue!(screen, cursor::Show).unwrap();
             screen.flush().unwrap();
@@ -396,7 +461,6 @@ impl<'a> Interface<'a> {
                 Event::Key(key_event) => {
                     let cursor = self.input.cursor;
                     let menu = self.menu_mode;
-                    let rank = self.rank;
                     let anywhere = self.anywhere;
                     idx = self.selection as i32;
 
@@ -406,9 +470,13 @@ impl<'a> Interface<'a> {
 
                     if cursor != self.input.cursor
                         || menu != self.menu_mode
-                        || rank != self.rank
                         || anywhere != self.anywhere
                     {
+                        idx = -1;
+                    }
+
+                    if self.needs_more() {
+                        self.load_more();
                         idx = -1;
                     }
                 }
@@ -460,14 +528,14 @@ impl<'a> Interface<'a> {
                 ..
             } => {
                 self.input.delete(Move::Backward);
-                self.refresh_matches(true);
+                self.load_initial_matches();
             }
 
             KeyEvent {
                 code: KeyCode::Delete, ..
             } => {
                 self.input.delete(Move::Forward);
-                self.refresh_matches(true);
+                self.load_initial_matches();
             }
 
             KeyEvent {
@@ -478,29 +546,20 @@ impl<'a> Interface<'a> {
 
             KeyEvent { code: Char(c), .. } => {
                 self.input.insert(c);
-                self.refresh_matches(true);
-            }
-
-            KeyEvent {
-                code: KeyCode::F(1), ..
-            } => {
-                self.rank = !self.rank;
-                self.refresh_matches(true);
+                self.load_initial_matches();
             }
 
             KeyEvent {
                 code: KeyCode::F(2), ..
-            } => {
-                if !self.matches.is_empty() {
+            }
+                if !self.matches.is_empty() => {
                     self.menu_mode = MenuMode::ConfirmDelete;
                 }
-            }
 
             KeyEvent {
                 code: KeyCode::F(3), ..
             } => {
                 self.switch_result_filter();
-                self.refresh_matches(true);
             }
             _ => {}
         }
@@ -508,7 +567,7 @@ impl<'a> Interface<'a> {
         false
     }
 
-    fn format_command_text(command: &Command, target: &str, width: u16, hl: Color, fg: Color) -> String {
+    fn format_command_text(command: &Match, target: &str, width: u16, hl: Color, fg: Color) -> String {
         let max_grapheme_length = cmp::max(width - 14, 0);
         let mut out1 = FixedLengthGraphemeString::empty(max_grapheme_length);
         out1.push_grapheme_str(&command.cmd[..]);
@@ -561,5 +620,11 @@ impl<'a> Interface<'a> {
         }
     }
 
-    fn command_line_index(&self, index: i16) -> i16 { if self.settings.bottom { -index } else { index } }
+    fn command_line_index(&self, index: i16) -> i16 {
+        if self.settings.bottom {
+            -index
+        } else {
+            index
+        }
+    }
 }

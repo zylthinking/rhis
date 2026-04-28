@@ -1,6 +1,7 @@
-use crate::{history::History, shell_history};
+use crate::{db, shell_history};
 
-pub fn clean(history: &mut History, command: &str) {
-    history.delete_command(command);
-    shell_history::delete_lines(command)
+pub fn clean(original: &str, dir: &str) {
+    let rt = tokio::runtime::Handle::current();
+    rt.block_on(db::delete_command(original, dir));
+    shell_history::delete_lines(original);
 }

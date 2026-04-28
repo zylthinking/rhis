@@ -1,13 +1,19 @@
 use rhis::{
-    history::History,
+    conf,
+    db,
     interface::Interface,
     settings::{Mode, Settings},
 };
 use std::time::{SystemTime, UNIX_EPOCH};
 
-fn handle_addition(settings: &Settings) {
-    let mut history = History::load::<false>();
-    history.add(&settings.command, &settings.sid, &settings.dir, settings.exit_code);
+async fn handle_addition(settings: &Settings) {
+    db::save_command(
+        &settings.command,
+        &settings.sid,
+        &settings.dir,
+        settings.exit_code,
+    )
+    .await;
 }
 
 fn handle_search(settings: &Settings) {
@@ -17,9 +23,8 @@ fn handle_search(settings: &Settings) {
         return;
     }
 
-    let mut history = History::load::<true>();
-    let mut ui = Interface::new(settings, &mut history, width, height);
-    let Some(cmd) = ui.display() else { return; };
+    let mut ui = Interface::new(settings, width, height);
+    let Some(cmd) = ui.display() else { return };
 
     for byte in cmd.as_bytes() {
         if unsafe { libc::ioctl(0, libc::TIOCSTI, byte) } < 0 {
@@ -28,14 +33,25 @@ fn handle_search(settings: &Settings) {
     }
 }
 
-fn main() {
+#[tokio::main]
+async fn main() {
     let settings = Settings::parse_args();
+    let config_path = settings
+        .config_path
+        .clone()
+        .unwrap_or_else(|| "./config.toml".into());
+    conf::conf_init(&config_path);
+
+    db::warmup();
+
     match settings.mode {
         Mode::Add => {
-            handle_addition(&settings);
+            handle_addition(&settings).await;
         }
         Mode::Search => {
-            handle_search(&settings);
+            tokio::task::block_in_place(|| {
+                handle_search(&settings);
+            });
         }
         Mode::Init => {
             let mut s: String = "".into();
@@ -55,7 +71,10 @@ fn main() {
             }
 
             let offset = script.find("__sid_place_holder__").unwrap();
-            let time = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos();
+            let time = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_nanos();
             let sid = format!("{time}");
             if s.is_empty() {
                 s = script.into();
