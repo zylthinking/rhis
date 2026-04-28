@@ -240,33 +240,6 @@ impl<'a> Interface<'a> {
         .join(" ")
     }
 
-    fn footer<W: Write>(&self, screen: &mut W, height: u16) {
-        let indx = self.line_range::<5>(height);
-        let max = cmp::max(indx.0, indx.1);
-        if max == -1 {
-            return;
-        }
-        let line = if self.settings.bottom {
-            cmp::min(indx.0, indx.1)
-        } else {
-            max
-        };
-
-        let total = self.total_count as usize;
-        let loaded = self.matches.len();
-        let more = if self.has_more { "+" } else { "" };
-        let status = format!("{loaded}{more}/{total}");
-
-        queue!(
-            screen,
-            cursor::MoveTo(1, line as u16),
-            SetForegroundColor(Color::DarkGrey),
-            Print(status),
-            SetForegroundColor(Color::Reset),
-        )
-        .unwrap();
-    }
-
     fn results<W: Write>(&mut self, screen: &mut W, mut idx: i32, width: u16, height: u16, resized: bool) {
         let area = self.line_range::<5>(height);
         let (min, max) = (cmp::min(area.0, area.1), cmp::max(area.0, area.1));
@@ -434,11 +407,9 @@ impl<'a> Interface<'a> {
                 self.results(&mut screen, -1, self.width, self.height, resized);
                 self.menubar(&mut screen, self.width, self.height);
                 self.prompt::<true, _>(&mut screen, self.width, self.height);
-                self.footer(&mut screen, self.height);
             } else {
                 self.results(&mut screen, idx, self.width, self.height, false);
                 self.prompt::<false, _>(&mut screen, self.width, self.height);
-                self.footer(&mut screen, self.height);
             }
             queue!(screen, cursor::Show).unwrap();
             screen.flush().unwrap();

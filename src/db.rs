@@ -150,7 +150,11 @@ pub async fn find_matches(
     let pool = pg_pool();
     let schema = &conf::conf_get().database.schema;
     let normalized_pattern = normalize::normalize(pattern);
-    let like = format!("%{}%", &normalized_pattern);
+    let like = if pattern.ends_with(' ') || pattern.ends_with('\t') {
+        format!("%{} %", &normalized_pattern)
+    } else {
+        format!("%{}%", &normalized_pattern)
+    };
 
     let sql = format!(
         "SELECT original, when_run FROM {schema}.commands \
